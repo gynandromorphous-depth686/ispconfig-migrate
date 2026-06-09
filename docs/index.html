@@ -322,6 +322,11 @@
     <p class="section-intro">Each step is a standalone script you can run independently, or chain them together for a full automated migration.</p>
     <div class="feature-grid">
       <div class="feature-card">
+        <div class="icon">🔍</div>
+        <h3>Server inventory</h3>
+        <p>Run on the old server to auto-detect all vhosts, PHP versions, and DB credentials from WordPress, Joomla, Laravel, and CakePHP config files. Outputs a ready-to-use <code>config.env</code>.</p>
+      </div>
+      <div class="feature-card">
         <div class="icon">🖥️</div>
         <h3>Universal installer</h3>
         <p>Auto-detects your distro and installs Apache, MariaDB, and multi-version PHP using the right package manager.</p>
@@ -370,6 +375,10 @@
         </tr>
       </thead>
       <tbody>
+        <tr>
+          <td><code>collect-inventory.sh</code> <span class="new-badge">new</span></td>
+          <td>Run on the <strong>old server</strong> first. Auto-detects all Apache vhosts, document roots, PHP versions, and DB credentials (WordPress, Joomla, Laravel, CakePHP). Outputs <code>config.env</code> with <code>FIXME:</code> placeholders for anything it can't find automatically.</td>
+        </tr>
         <tr>
           <td><code>00-install.sh</code> <span class="new-badge">new</span></td>
           <td>Universal installer: detects distro, installs LAMP, ISPConfig, CSF/firewalld, Maldet + ClamAV. Supports Debian, Ubuntu, RHEL/AlmaLinux/Rocky, openSUSE.</td>
