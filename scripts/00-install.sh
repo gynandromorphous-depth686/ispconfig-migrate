@@ -13,8 +13,7 @@
 #   1. Detects the OS and version
 #   2. Installs Apache, MariaDB, PHP (7.4 + 8.1) via the right package manager
 #   3. Installs ISPConfig via the official auto-installer
-#   4. Hardens with CSF (Debian/Ubuntu), firewalld (RHEL), or zypper-equivalent
-#   5. Installs Maldet + ClamAV
+#   4. Hardens with CSF (Debian/Ubuntu), firewalld (RHEL/SUSE), Maldet + ClamAV, Fail2ban
 #
 # Usage:
 #   bash 00-install.sh [--no-ispconfig] [--php-versions "7.4 8.1 8.4"]
@@ -69,9 +68,11 @@ detect_os() {
   if [[ -f /etc/os-release ]]; then
     # shellcheck disable=SC1091
     source /etc/os-release
-    OS_ID="${ID,,}"           # debian, ubuntu, rhel, almalinux, rocky, opensuse-leap
+    OS_ID="${ID,,}"            # debian, ubuntu, rhel, almalinux, rocky, opensuse-leap
     OS_VERSION="${VERSION_ID}" # 11, 12, 22.04, 9, etc.
-    OS_LIKE="${ID_LIKE,,:-}"  # debian, rhel, suse
+    # FIX: ${ID_LIKE,,:-} is invalid; use separate default
+    OS_LIKE="${ID_LIKE:-}"
+    OS_LIKE="${OS_LIKE,,}"
   else
     die "Cannot detect OS: /etc/os-release not found."
   fi
@@ -131,6 +132,7 @@ pkg_install() {
 
 # ----------------------------------------------------------------
 # PHP repo setup per distro
+# Must be called before install_php
 # ----------------------------------------------------------------
 setup_php_repo() {
   case "$DISTRO_FAMILY" in
@@ -150,13 +152,12 @@ setup_php_repo() {
       if ! rpm -q epel-release &>/dev/null; then
         log "Adding EPEL + Remi repo..."
         dnf install -y epel-release
-        dnf install -y https://rpms.remirepo.net/enterprise/remi-release-$(rpm -E '%{rhel}').rpm
+        dnf install -y "https://rpms.remirepo.net/enterprise/remi-release-$(rpm -E '%{rhel}').rpm"
         dnf module reset php -y 2>/dev/null || true
         ok "EPEL + Remi repo added"
       fi
       ;;
     suse)
-      # Packman repo provides extra PHP versions
       if ! zypper repos | grep -q "Packman" 2>/dev/null; then
         log "Adding Packman repo..."
         LEAP_VER=$(echo "$OS_VERSION" | cut -d. -f1,2)
@@ -171,17 +172,13 @@ setup_php_repo() {
 
 # ----------------------------------------------------------------
 # Install Apache
+# Note: proxy_fcgi requires libapache2-mod-fcgid on Debian
 # ----------------------------------------------------------------
 install_apache() {
   log "Installing Apache..."
   case "$DISTRO_FAMILY" in
-    debian) pkg_install apache2 ;;
-    rhel)   pkg_install httpd mod_ssl ;;
-    suse)   pkg_install apache2 apache2-mod_php8 ;;
-  esac
-
-  case "$DISTRO_FAMILY" in
     debian)
+      pkg_install apache2 libapache2-mod-fcgid
       a2enmod proxy_fcgi setenvif headers rewrite ssl 2>/dev/null || true
       a2dissite 000-default.conf 2>/dev/null || true
       sed -i 's/^ServerTokens.*/ServerTokens Prod/' /etc/apache2/conf-available/security.conf 2>/dev/null || true
@@ -189,11 +186,13 @@ install_apache() {
       systemctl enable apache2 && systemctl start apache2
       ;;
     rhel)
+      pkg_install httpd mod_ssl mod_fcgid
       sed -i 's/^ServerTokens.*/ServerTokens Prod/' /etc/httpd/conf/httpd.conf 2>/dev/null || true
       sed -i 's/^ServerSignature.*/ServerSignature Off/' /etc/httpd/conf/httpd.conf 2>/dev/null || true
       systemctl enable httpd && systemctl start httpd
       ;;
     suse)
+      pkg_install apache2 apache2-mod_fcgid
       systemctl enable apache2 && systemctl start apache2
       ;;
   esac
@@ -226,6 +225,7 @@ EOSQL
 
 # ----------------------------------------------------------------
 # Install PHP (multi-version)
+# setup_php_repo must be called first
 # ----------------------------------------------------------------
 install_php() {
   log "Installing PHP versions: $PHP_VERSIONS"
@@ -236,33 +236,33 @@ install_php() {
     log "  Installing PHP $VER..."
     case "$DISTRO_FAMILY" in
       debian)
-        PKGS=""
+        # FIX: install each package individually so one missing package
+        # does not silently skip the entire install under set -e
         for EXT in $PHP_EXTENSIONS; do
-          PKGS="$PKGS php${VER}-${EXT}"
+          pkg_install "php${VER}-${EXT}" || warn "php${VER}-${EXT} not available"
         done
-        # imagick may not exist for all versions, install separately
-        pkg_install $PKGS || true
-        pkg_install php${VER}-imagick 2>/dev/null || warn "imagick not available for PHP $VER"
-        systemctl enable php${VER}-fpm && systemctl start php${VER}-fpm
+        pkg_install "php${VER}-imagick" 2>/dev/null || warn "imagick not available for PHP $VER"
+        systemctl enable "php${VER}-fpm" && systemctl start "php${VER}-fpm"
         ;;
       rhel)
-        # Remi uses php74, php81, php84 module names
+        # Remi packages are named php74, php81, php84, etc.
         REMI_VER=$(echo "$VER" | tr -d '.')
-        dnf module enable -y "php:remi-${VER}" 2>/dev/null || \
-          dnf install -y "php${REMI_VER}" "php${REMI_VER}-php-fpm" "php${REMI_VER}-php-mysqlnd" \
-            "php${REMI_VER}-php-gd" "php${REMI_VER}-php-mbstring" "php${REMI_VER}-php-xml" \
-            "php${REMI_VER}-php-zip" "php${REMI_VER}-php-intl" "php${REMI_VER}-php-bcmath" \
-            "php${REMI_VER}-php-opcache" || warn "Some PHP $VER packages not available"
-        systemctl enable php${REMI_VER}-php-fpm 2>/dev/null && \
-          systemctl start php${REMI_VER}-php-fpm 2>/dev/null || true
+        for PKG in "php${REMI_VER}" "php${REMI_VER}-php-fpm" "php${REMI_VER}-php-mysqlnd" \
+                   "php${REMI_VER}-php-gd" "php${REMI_VER}-php-mbstring" "php${REMI_VER}-php-xml" \
+                   "php${REMI_VER}-php-zip" "php${REMI_VER}-php-intl" "php${REMI_VER}-php-bcmath" \
+                   "php${REMI_VER}-php-opcache"; do
+          dnf install -y "$PKG" 2>/dev/null || warn "$PKG not available"
+        done
+        systemctl enable "php${REMI_VER}-php-fpm" 2>/dev/null && \
+          systemctl start "php${REMI_VER}-php-fpm" 2>/dev/null || true
         ;;
       suse)
-        # openSUSE ships php8 natively; older versions via Packman
         SUSE_VER=$(echo "$VER" | tr -d '.')
-        pkg_install "php${SUSE_VER}" "php${SUSE_VER}-fpm" "php${SUSE_VER}-mysql" \
-          "php${SUSE_VER}-curl" "php${SUSE_VER}-gd" "php${SUSE_VER}-mbstring" \
-          "php${SUSE_VER}-xml" "php${SUSE_VER}-zip" "php${SUSE_VER}-bcmath" 2>/dev/null || \
-          warn "Some PHP $VER packages not available for openSUSE"
+        for PKG in "php${SUSE_VER}" "php${SUSE_VER}-fpm" "php${SUSE_VER}-mysql" \
+                   "php${SUSE_VER}-curl" "php${SUSE_VER}-gd" "php${SUSE_VER}-mbstring" \
+                   "php${SUSE_VER}-xml" "php${SUSE_VER}-zip" "php${SUSE_VER}-bcmath"; do
+          zypper --non-interactive install -y "$PKG" 2>/dev/null || warn "$PKG not available"
+        done
         systemctl enable php-fpm 2>/dev/null && systemctl start php-fpm 2>/dev/null || true
         ;;
     esac
@@ -293,23 +293,63 @@ install_certbot() {
 }
 
 # ----------------------------------------------------------------
-# Firewall: CSF (Debian/Ubuntu), firewalld (RHEL), SuSEfirewall2/firewalld (SUSE)
+# ISPConfig auto-installer
+# Run BEFORE firewall so outbound HTTPS is not blocked during install
+# ----------------------------------------------------------------
+install_ispconfig() {
+  if [[ "$INSTALL_ISPCONFIG" != true ]]; then
+    log "Skipping ISPConfig (--no-ispconfig)"
+    return
+  fi
+
+  # ISPConfig auto-installer is officially supported on Debian/Ubuntu only
+  if [[ "$DISTRO_FAMILY" == "suse" ]]; then
+    warn "ISPConfig auto-installer is not officially supported on openSUSE. Skipping."
+    warn "See https://www.ispconfig.org/documentation/ for manual install."
+    return
+  fi
+
+  log "Installing ISPConfig..."
+  pkg_install wget curl php-cli php-soap
+
+  # FIX: use the correct URL and a single consistent filename
+  local INSTALLER="/tmp/ispconfig_autoinstall.php"
+  if [[ ! -f "$INSTALLER" ]]; then
+    wget -q -O "$INSTALLER" "https://get.ispconfig.org" \
+      || die "Could not download ISPConfig installer from https://get.ispconfig.org"
+  fi
+
+  # FIX: quote $PHP_VERSIONS expansion
+  php "$INSTALLER" \
+    --no-interaction \
+    --use-ftp-ports=0 \
+    --use-nginx=0 \
+    --use-apache=1 \
+    --use-php-versions="$(echo "$PHP_VERSIONS" | tr ' ' ',')" \
+    2>&1 | tee -a "$LOG_FILE" || \
+    warn "ISPConfig installer exited with errors — check $LOG_FILE"
+
+  ok "ISPConfig installed. Panel: https://$(hostname -I | awk '{print $1}'):8080"
+}
+
+# ----------------------------------------------------------------
+# Firewall: CSF (Debian/Ubuntu), firewalld (RHEL/SUSE)
+# Run AFTER ISPConfig so downloads are not blocked
 # ----------------------------------------------------------------
 install_firewall() {
   log "Installing firewall..."
 
   case "$DISTRO_FAMILY" in
     debian)
-      # CSF — note: original developer shut down Aug 2025, new URL:
       if ! command -v csf &>/dev/null; then
         pkg_install wget perl libwww-perl libio-socket-ssl-perl
         cd /tmp
         wget -q https://download.configserver.dev/csf.tgz
         tar xzf csf.tgz
-        cd /tmp/csf && sh install.sh
+        # FIX: use absolute path to avoid issues with symlinked /tmp
+        bash /tmp/csf/install.sh
       fi
 
-      # Port rules: include 8080/8081 for ISPConfig panel
       TCP_IN="20,21,22,25,53,80,110,143,443,465,587,993,995,8080,8081,4500:4600"
       TCP_OUT="20,21,22,25,53,80,443,3306"
 
@@ -324,30 +364,16 @@ install_firewall() {
       ok "CSF firewall installed"
       ;;
 
-    rhel)
+    rhel|suse)
       pkg_install firewalld
       systemctl enable firewalld && systemctl start firewalld
 
-      # Open required ports
       for PORT in 20 21 22 25 53 80 110 143 443 465 587 993 995 8080 8081; do
-        firewall-cmd --permanent --add-port=${PORT}/tcp 2>/dev/null || true
+        firewall-cmd --permanent --add-port="${PORT}/tcp" 2>/dev/null || true
       done
       firewall-cmd --permanent --add-port=4500-4600/tcp 2>/dev/null || true
       firewall-cmd --reload
       ok "firewalld installed"
-      ;;
-
-    suse)
-      # openSUSE ships with firewalld
-      pkg_install firewalld
-      systemctl enable firewalld && systemctl start firewalld
-
-      for PORT in 20 21 22 25 53 80 110 143 443 465 587 993 995 8080 8081; do
-        firewall-cmd --permanent --add-port=${PORT}/tcp 2>/dev/null || true
-      done
-      firewall-cmd --permanent --add-port=4500-4600/tcp 2>/dev/null || true
-      firewall-cmd --reload
-      ok "firewalld installed (openSUSE)"
       ;;
   esac
 }
@@ -369,13 +395,12 @@ install_maldet() {
   freshclam 2>/dev/null || true
   systemctl start clamav-freshclam 2>/dev/null || true
 
-  # Maldet
   if ! command -v maldet &>/dev/null; then
     cd /tmp
     wget -q https://www.rfxn.com/downloads/maldetect-current.tar.gz
     MALDIR=$(tar tzf maldetect-current.tar.gz | head -1 | cut -d/ -f1)
     tar xzf maldetect-current.tar.gz
-    cd /tmp/${MALDIR} && sh install.sh
+    bash "/tmp/${MALDIR}/install.sh"
   fi
 
   sed -i 's/^email_alert=.*/email_alert="0"/' /usr/local/maldetect/conf.maldet
@@ -437,50 +462,7 @@ EOF
 }
 
 # ----------------------------------------------------------------
-# ISPConfig auto-installer
-# ----------------------------------------------------------------
-install_ispconfig() {
-  if [[ "$INSTALL_ISPCONFIG" != true ]]; then
-    log "Skipping ISPConfig (--no-ispconfig)"
-    return
-  fi
-
-  log "Installing ISPConfig..."
-
-  # ISPConfig auto-installer requires Debian/Ubuntu; RHEL support is experimental
-  if [[ "$DISTRO_FAMILY" == "suse" ]]; then
-    warn "ISPConfig auto-installer is not officially supported on openSUSE. Skipping."
-    warn "See https://www.ispconfig.org/documentation/ for manual install."
-    return
-  fi
-
-  pkg_install wget curl
-
-  # Download and run ISPConfig auto-installer
-  wget -O /tmp/ispconfig-autoinstall.php \
-    https://www.ispconfig.org/downloads/ISPConfig-3-stable.tar.gz 2>/dev/null || true
-
-  # Use the official autoinstaller script
-  if [[ ! -f /tmp/ispconfig_autoinstall.php ]]; then
-    wget -q -O /tmp/ispconfig_autoinstall.php \
-      "https://get.ispconfig.org" || die "Could not download ISPConfig installer"
-  fi
-
-  # Run non-interactively (adjust flags as needed)
-  php /tmp/ispconfig_autoinstall.php \
-    --no-interaction \
-    --use-ftp-ports=0 \
-    --use-nginx=0 \
-    --use-apache=1 \
-    --use-php-versions="$(echo $PHP_VERSIONS | tr ' ' ',')" \
-    2>&1 | tee -a "$LOG_FILE" || \
-    warn "ISPConfig installer exited with errors — check $LOG_FILE"
-
-  ok "ISPConfig installation complete. Panel: https://$(hostname -I | awk '{print $1}'):8080"
-}
-
-# ----------------------------------------------------------------
-# Security headers (Apache)
+# Apache security headers
 # ----------------------------------------------------------------
 configure_security_headers() {
   log "Configuring Apache security headers..."
@@ -496,7 +478,7 @@ EOF
       systemctl reload apache2
       ;;
     rhel)
-      cat >> /etc/httpd/conf.d/security-headers.conf << 'EOF'
+      cat > /etc/httpd/conf.d/security-headers.conf << 'EOF'
 Header always set X-Frame-Options "SAMEORIGIN"
 Header always set X-Content-Type-Options "nosniff"
 Header always set Referrer-Policy "strict-origin-when-cross-origin"
@@ -504,7 +486,7 @@ EOF
       systemctl reload httpd
       ;;
     suse)
-      cat >> /etc/apache2/conf.d/security-headers.conf << 'EOF'
+      cat > /etc/apache2/conf.d/security-headers.conf << 'EOF'
 Header always set X-Frame-Options "SAMEORIGIN"
 Header always set X-Content-Type-Options "nosniff"
 Header always set Referrer-Policy "strict-origin-when-cross-origin"
@@ -535,20 +517,23 @@ print_summary() {
 }
 
 # ----------------------------------------------------------------
-# Main
+# Main — order matters:
+#   1. LAMP stack first (Apache, MariaDB, PHP)
+#   2. ISPConfig before firewall (needs outbound HTTPS during install)
+#   3. Firewall last (locks down the server)
 # ----------------------------------------------------------------
 require_root
 detect_os
 pkg_update
 
+setup_php_repo      # must be before install_php
 install_apache
 install_mariadb
-setup_php_repo
 install_php
 install_certbot
-install_firewall
+install_ispconfig   # before firewall
 install_maldet
 install_fail2ban
 configure_security_headers
-install_ispconfig
+install_firewall    # last — locks down outbound after all downloads done
 print_summary
