@@ -1,0 +1,4 @@
+config.env
+dumps/
+*.sql
+*.log
