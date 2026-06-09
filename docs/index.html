@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ispconfig-migrate — LAMP server migration toolkit by 123Helpdesk</title>
+  <meta name="description" content="Open-source toolkit to migrate any LAMP shared hosting server to Debian 13 + ISPConfig. Supports Debian, Ubuntu, RHEL, AlmaLinux, Rocky Linux, and openSUSE.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:    #1a6fdf;
+      --blue-dk: #1455b0;
+      --green:   #16a34a;
+      --gray-50: #f8fafc;
+      --gray-100:#f1f5f9;
+      --gray-200:#e2e8f0;
+      --gray-600:#475569;
+      --gray-800:#1e293b;
+      --radius:  8px;
+      --mono:    'SF Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--gray-800);
+      line-height: 1.6;
+      background: #fff;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ---- Nav ---- */
+    nav {
+      background: var(--gray-800);
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+    }
+    nav .brand { color: #fff; font-weight: 700; font-size: 1rem; letter-spacing: -0.3px; }
+    nav .brand span { color: #60a5fa; }
+    nav .nav-links { display: flex; gap: 1.5rem; }
+    nav .nav-links a { color: #cbd5e1; font-size: 0.875rem; }
+    nav .nav-links a:hover { color: #fff; text-decoration: none; }
+
+    /* ---- Hero ---- */
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+      color: #fff;
+      padding: 5rem 2rem 4rem;
+      text-align: center;
+    }
+    .hero .badge {
+      display: inline-block;
+      background: rgba(96,165,250,0.15);
+      border: 1px solid rgba(96,165,250,0.3);
+      color: #93c5fd;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      margin-bottom: 1.25rem;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 1rem;
+    }
+    .hero h1 code {
+      font-family: var(--mono);
+      color: #60a5fa;
+      font-size: 0.9em;
+    }
+    .hero p {
+      font-size: 1.125rem;
+      color: #94a3b8;
+      max-width: 620px;
+      margin: 0 auto 2rem;
+    }
+    .hero-cta { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.7rem 1.5rem;
+      border-radius: var(--radius);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.9; text-decoration: none; transform: translateY(-1px); }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-outline { background: transparent; color: #e2e8f0; border: 1px solid #475569; }
+
+    /* ---- Quick install box ---- */
+    .install-box {
+      max-width: 680px;
+      margin: 2.5rem auto 0;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius);
+      text-align: left;
+    }
+    .install-box .ib-title {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      font-size: 0.75rem;
+      color: #64748b;
+      font-family: var(--mono);
+    }
+    .install-box pre {
+      padding: 1rem 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: #e2e8f0;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .install-box pre .cmd { color: #60a5fa; }
+    .install-box pre .comment { color: #475569; }
+
+    /* ---- Distro badges ---- */
+    .distros {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 2rem;
+    }
+    .distro-badge {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #cbd5e1;
+      font-size: 0.75rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+    }
+
+    /* ---- Sections ---- */
+    section { padding: 4rem 2rem; }
+    .container { max-width: 960px; margin: 0 auto; }
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 0.5rem;
+    }
+    h2 {
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      margin-bottom: 0.75rem;
+    }
+    .section-intro { color: var(--gray-600); max-width: 580px; margin-bottom: 2.5rem; }
+
+    /* ---- Feature grid ---- */
+    .features { background: var(--gray-50); }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.25rem;
+    }
+    .feature-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+    }
+    .feature-card .icon {
+      font-size: 1.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .feature-card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem; }
+    .feature-card p  { font-size: 0.85rem; color: var(--gray-600); }
+
+    /* ---- Scripts table ---- */
+    .scripts-section { background: #fff; }
+    .scripts-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    .scripts-table th {
+      text-align: left;
+      padding: 0.6rem 1rem;
+      background: var(--gray-100);
+      border-bottom: 2px solid var(--gray-200);
+      font-weight: 700;
+      color: var(--gray-800);
+    }
+    .scripts-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--gray-200);
+      vertical-align: top;
+    }
+    .scripts-table tr:last-child td { border-bottom: none; }
+    .scripts-table code {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      background: var(--gray-100);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+    }
+    .new-badge {
+      display: inline-block;
+      background: #dcfce7;
+      color: #15803d;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.1rem 0.4rem;
+      border-radius: 999px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-left: 0.4rem;
+      vertical-align: middle;
+    }
+
+    /* ---- Gotchas / notes ---- */
+    .notes-section { background: var(--gray-50); }
+    .note-list { display: flex; flex-direction: column; gap: 1rem; }
+    .note {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-left: 3px solid var(--blue);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+    }
+    .note h4 { font-size: 0.875rem; font-weight: 700; margin-bottom: 0.3rem; }
+    .note p  { font-size: 0.85rem; color: var(--gray-600); }
+    .note code {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      background: var(--gray-100);
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+    }
+
+    /* ---- About ---- */
+    .about-section { background: #fff; }
+    .about-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: start;
+    }
+    @media (max-width: 640px) {
+      .about-inner { grid-template-columns: 1fr; }
+      nav .nav-links { display: none; }
+    }
+    .about-section p { color: var(--gray-600); margin-bottom: 0.75rem; font-size: 0.95rem; }
+
+    /* ---- Footer ---- */
+    footer {
+      background: var(--gray-800);
+      color: #64748b;
+      padding: 2rem;
+      text-align: center;
+      font-size: 0.8rem;
+    }
+    footer a { color: #94a3b8; }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="brand">123<span>Helpdesk</span>.nl</div>
+  <div class="nav-links">
+    <a href="#scripts">Scripts</a>
+    <a href="#gotchas">API notes</a>
+    <a href="#about">About</a>
+    <a href="https://github.com/hydtie/ispconfig-migrate">GitHub →</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="badge">Open source · MIT license</div>
+  <h1>Migrate LAMP hosting to<br><code>ISPConfig</code> on Debian 13</h1>
+  <p>A complete toolkit to move shared hosting from any Linux server to a fresh Debian 13 setup with ISPConfig — including server hardening, multi-version PHP, and database migration.</p>
+
+  <div class="hero-cta">
+    <a href="https://github.com/hydtie/ispconfig-migrate" class="btn btn-primary">
+      ★ View on GitHub
+    </a>
+    <a href="#scripts" class="btn btn-outline">
+      See the scripts
+    </a>
+  </div>
+
+  <div class="install-box">
+    <div class="ib-title">bash — quick install on Debian 13</div>
+    <pre><span class="comment"># Install LAMP + ISPConfig + hardening in one command</span>
+<span class="cmd">wget</span> -qO- https://raw.githubusercontent.com/hydtie/ispconfig-migrate/master/scripts/00-install.sh | bash
+
+<span class="comment"># Or skip ISPConfig (LAMP + hardening only)</span>
+<span class="cmd">bash</span> 00-install.sh --no-ispconfig</pre>
+  </div>
+
+  <div class="distros">
+    <span class="distro-badge">Debian 11 / 12 / 13</span>
+    <span class="distro-badge">Ubuntu 22.04 / 24.04</span>
+    <span class="distro-badge">RHEL / AlmaLinux / Rocky 8+9</span>
+    <span class="distro-badge">openSUSE Leap 15</span>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-label">What's included</div>
+    <h2>Everything for a clean migration</h2>
+    <p class="section-intro">Each step is a standalone script you can run independently, or chain them together for a full automated migration.</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="icon">🖥️</div>
+        <h3>Universal installer</h3>
+        <p>Auto-detects your distro and installs Apache, MariaDB, and multi-version PHP using the right package manager.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🔒</div>
+        <h3>Server hardening</h3>
+        <p>CSF firewall (Debian/Ubuntu), firewalld (RHEL/SUSE), Maldet + ClamAV, Fail2ban with ISPConfig log paths.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">⚙️</div>
+        <h3>ISPConfig SOAP API</h3>
+        <p>Provisions all your sites via the ISPConfig remote API. Handles clients, PHP-FPM pools, SSL, and subdomain aliases.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🐘</div>
+        <h3>Multi-version PHP</h3>
+        <p>Assigns the correct PHP version (5.6 through 8.4) per site by moving FPM pool configs between PHP versions.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📁</div>
+        <h3>File migration</h3>
+        <p>Rsyncs web files from the old server to ISPConfig document roots with automatic ownership correction.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🗄️</div>
+        <h3>Database migration</h3>
+        <p>Dumps all databases with <code>--single-transaction --routines --triggers --events</code> and imports with user creation.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Scripts table -->
+<section class="scripts-section" id="scripts">
+  <div class="container">
+    <div class="section-label">The scripts</div>
+    <h2>Run them in order</h2>
+    <p class="section-intro">Copy <code>config.env.example</code> to <code>config.env</code>, fill in your server details, then run each script as root on the new server.</p>
+
+    <table class="scripts-table">
+      <thead>
+        <tr>
+          <th>Script</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>00-install.sh</code> <span class="new-badge">new</span></td>
+          <td>Universal installer: detects distro, installs LAMP, ISPConfig, CSF/firewalld, Maldet + ClamAV. Supports Debian, Ubuntu, RHEL/AlmaLinux/Rocky, openSUSE.</td>
+        </tr>
+        <tr>
+          <td><code>01-hardening.sh</code></td>
+          <td>Apache security headers, PHP 7.4 + 8.1 via Sury repo, MariaDB secure install, CSF firewall, Maldet, Fail2ban — for Debian/Ubuntu only.</td>
+        </tr>
+        <tr>
+          <td><code>02-ispconfig-provision.php</code></td>
+          <td>Creates clients and web domains in ISPConfig via the SOAP remote API.</td>
+        </tr>
+        <tr>
+          <td><code>03-set-php-version.sh</code></td>
+          <td>Assigns the correct PHP version per site by moving FPM pool configs and updating Apache vhost socket paths.</td>
+        </tr>
+        <tr>
+          <td><code>04-migrate-files.sh</code></td>
+          <td>Rsyncs web files from old server to ISPConfig document roots with ownership correction.</td>
+        </tr>
+        <tr>
+          <td><code>05-migrate-databases.sh</code></td>
+          <td>Dumps databases from old server, creates users and databases on new server, imports dumps.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ISPConfig gotchas -->
+<section class="notes-section" id="gotchas">
+  <div class="container">
+    <div class="section-label">ISPConfig API notes</div>
+    <h2>Quirks we found the hard way</h2>
+    <p class="section-intro">The ISPConfig SOAP API is powerful but has some undocumented behaviours. These took time to track down.</p>
+
+    <div class="note-list">
+      <div class="note">
+        <h4>Remote API user is not the admin user</h4>
+        <p>The API user must be created separately in <strong>System → Remote Users</strong>. The ISPConfig admin login does not work for API calls.</p>
+      </div>
+      <div class="note">
+        <h4><code>pm</code> is required and must be an enum</h4>
+        <p>The <code>pm</code> field for PHP-FPM must be <code>ondemand</code>, <code>dynamic</code>, or <code>static</code>. Omitting it causes a cryptic validation error.</p>
+      </div>
+      <div class="note">
+        <h4>PHP version is not controlled by the API alone</h4>
+        <p>ISPConfig generates FPM pool configs in the highest installed PHP version's directory. Use <code>03-set-php-version.sh</code> to move pools after provisioning.</p>
+      </div>
+      <div class="note">
+        <h4><code>subdomain='www'</code> doubles the prefix</h4>
+        <p>If your domain is already <code>www.example.com</code>, setting <code>subdomain='www'</code> creates a <code>www.www.example.com</code> alias. Set <code>subdomain='none'</code> instead.</p>
+      </div>
+      <div class="note">
+        <h4>CSF moved to a new domain in August 2025</h4>
+        <p>The original ConfigServer developer shut down in August 2025. CSF is now available at <code>https://download.configserver.dev/csf.tgz</code>. The scripts use this new URL.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- About -->
+<section class="about-section" id="about">
+  <div class="container">
+    <div class="about-inner">
+      <div>
+        <div class="section-label">About</div>
+        <h2>Made by 123Helpdesk</h2>
+        <p>123Helpdesk is a Dutch web hosting provider that has been running LAMP servers since 2008.</p>
+        <p>These scripts were built during a real-world migration from Ubuntu 18.04 (Apache / MySQL 5.7 / PHP 7.4) to Debian 13 (ISPConfig / MariaDB 11 / PHP 7.4 + 8.1), moving 9 production sites without downtime.</p>
+        <p>We open-sourced them so others can benefit from the lessons learned — especially around the ISPConfig API quirks that took hours to debug.</p>
+        <a href="https://www.123helpdesk.nl" class="btn btn-primary" style="margin-top:1rem;">Visit 123helpdesk.nl</a>
+      </div>
+      <div>
+        <div class="section-label">Tested on</div>
+        <h2>Real production migration</h2>
+        <p><strong>Old server:</strong> Ubuntu 18.04 LTS, Apache 2.4, MySQL 5.7, PHP 7.4 — 9 sites, 6 customers, mixed WordPress / CakePHP / Joomla stacks.</p>
+        <p><strong>New server:</strong> Debian 13 (trixie), ISPConfig 3.2.x, MariaDB 11.8, Apache 2.4.67, PHP 5.6 / 7.4 / 8.1 / 8.4.</p>
+        <p>The universal <code>00-install.sh</code> script extends this to Debian 11/12, Ubuntu 22.04/24.04, RHEL 8/9, AlmaLinux, Rocky Linux, and openSUSE Leap 15.</p>
+        <a href="https://github.com/hydtie/ispconfig-migrate" class="btn btn-outline" style="margin-top:1rem; border-color:#e2e8f0; color:#1e293b;">
+          ★ Star on GitHub
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>
+    <a href="https://github.com/hydtie/ispconfig-migrate">ispconfig-migrate</a> is MIT licensed.
+    Made by <a href="https://www.123helpdesk.nl">123Helpdesk.nl</a> · Netherlands.
+  </p>
+</footer>
+
+</body>
+</html>
