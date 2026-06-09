@@ -35,7 +35,7 @@ Debian 13 (ISPConfig / MariaDB 11 / PHP 7.4 + 8.1).
 
 ```bash
 # 1. Clone
-git clone https://github.com/yourusername/ispconfig-migrate.git
+git clone https://github.com/hydtie/ispconfig-migrate.git
 cd ispconfig-migrate
 
 # 2. Configure
